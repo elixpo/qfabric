@@ -3,7 +3,7 @@ set -euo pipefail
 
 campaign_id="${1:-stage12-kernels-01}"
 root="data/processed/stage12/${campaign_id}"
-iterations="${QF_ITERATIONS:-1000}"
+iterations="${QF_ITERATIONS:-2000}"
 warmup="${QF_WARMUP:-100}"
 load_workers="${QF_LOAD_WORKERS:-8}"
 contention_workers="${QF_CONTENTION_WORKERS:-4}"

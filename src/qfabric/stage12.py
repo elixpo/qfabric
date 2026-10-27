@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import platform
 import random
@@ -242,3 +243,214 @@ def run_kernel_profile(
 def write_kernel_profile(report: dict[str, Any], output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+# Replay rules, fixed before any Stage 12 data was collected.
+CHAIN_NODES = 4
+MANUAL_EXPERT = ("linux", "rt", "rt", "linux")
+DEADLINE_SAFETY_FACTOR = 1.25
+DEADLINE_QUANTUM_NS = 1_000_000
+WINDOW_INVOCATIONS = 20
+MAX_MISS_RATE_PCT = 1.0
+VIOLATION_WINDOWS = 3
+PROBATION_WINDOWS = 6
+BASELINES = (
+    "ordinary-linux",
+    "tuned-linux",
+    "static-mcu-first",
+    "manual-expert",
+    "qfabric-static",
+    "qfabric-recovery",
+    "qfabric-recovery-tuned",
+    "offline-oracle",
+)
+
+
+def _trace(campaign: Path, load: str, policy: str, domain: str, workload: str) -> list[int]:
+    report = json.loads((campaign / f"{load}-{policy}-{domain}.json").read_text("utf-8"))
+    entry = next(item for item in report["workloads"] if item["workload"] == workload)
+    # Failed invocations stay in the trace as unbounded latencies so that they
+    # count as deadline misses rather than vanishing from the replay.
+    return [
+        sample["end_to_end_ns"] if sample["outcome"] == "ok" else 2**62
+        for sample in entry["samples"]
+    ]
+
+
+def derive_stage12_deadline(campaign: Path, workload: str) -> dict[str, Any]:
+    """Per-node deadline: 1.25x the slower domain's idle ordinary-caller p99."""
+    p99 = {
+        domain: percentile(_trace(campaign, "idle", "other", domain, workload), 99)
+        for domain in ("linux", "rt")
+    }
+    deadline_ns = (
+        math.ceil(max(p99.values()) * DEADLINE_SAFETY_FACTOR / DEADLINE_QUANTUM_NS)
+        * DEADLINE_QUANTUM_NS
+    )
+    return {
+        "metric": "maximum idle ordinary-caller p99 across domains",
+        "source_p99_ns": p99,
+        "safety_factor": DEADLINE_SAFETY_FACTOR,
+        "rounding_quantum_ns": DEADLINE_QUANTUM_NS,
+        "per_node_deadline_ns": deadline_ns,
+        "graph_deadline_ns": deadline_ns * CHAIN_NODES,
+        "post_hoc_tuned": False,
+    }
+
+
+def _replay_chain(placements: list[tuple[str, ...]], traces: dict[str, list[int]]) -> list[int]:
+    """Consume each domain's trace in measured order, one sample per node visit."""
+    cursors = {"linux": 0, "rt": 0}
+    totals = []
+    for placement in placements:
+        total = 0
+        for domain in placement:
+            trace = traces[domain]
+            total += trace[cursors[domain] % len(trace)]
+            cursors[domain] += 1
+        totals.append(total)
+    return totals
+
+
+def _recovery_placements(
+    observations: int,
+    traces: dict[str, list[int]],
+    idle_rt_p95_ns: float,
+    graph_deadline_ns: int,
+) -> tuple[list[tuple[str, ...]], dict[str, Any]]:
+    """Replay the Stage 7 protocol: hysteresis, admission, probation, commit or rollback."""
+    linux = ("linux",) * CHAIN_NODES
+    rt = ("rt",) * CHAIN_NODES
+    admissible = idle_rt_p95_ns * CHAIN_NODES <= graph_deadline_ns
+    placements: list[tuple[str, ...]] = []
+    events: dict[str, Any] = {"admissible": admissible, "switch_window": None, "outcome": "none"}
+    current = linux
+    streak = 0
+    probation: list[int] = []
+    window = 0
+    while len(placements) < observations:
+        size = min(WINDOW_INVOCATIONS, observations - len(placements))
+        start = len(placements)
+        placements.extend([current] * size)
+        totals = _replay_chain(placements, traces)[start:]
+        miss_rate = 100 * sum(total > graph_deadline_ns for total in totals) / size
+        if current == rt and events["outcome"] == "probation":
+            probation.extend(totals)
+            if len(probation) >= PROBATION_WINDOWS * WINDOW_INVOCATIONS:
+                probation_rate = (
+                    100 * sum(total > graph_deadline_ns for total in probation) / len(probation)
+                )
+                if probation_rate <= MAX_MISS_RATE_PCT:
+                    events["outcome"] = "committed"
+                else:
+                    events["outcome"] = "rolled-back"
+                    events["rollback_window"] = window
+                    current = linux
+        elif events["outcome"] == "none":
+            streak = streak + 1 if miss_rate > MAX_MISS_RATE_PCT else 0
+            if streak >= VIOLATION_WINDOWS:
+                if admissible:
+                    events["switch_window"] = window + 1
+                    events["outcome"] = "probation"
+                    current = rt
+                else:
+                    events["outcome"] = "rejected-predicted-deadline-miss"
+        window += 1
+    return placements, events
+
+
+def _summarize_replay(values: list[int], graph_deadline_ns: int) -> dict[str, Any]:
+    misses = sum(value > graph_deadline_ns for value in values)
+    return {
+        "observations": len(values),
+        "misses": misses,
+        "miss_rate_pct": 100 * misses / len(values),
+        **summarize(values),
+    }
+
+
+def evaluate_stage12(campaign: Path, observations: int = 500) -> dict[str, Any]:
+    results = []
+    deadlines = {}
+    for task, passes in WORKLOADS:
+        workload = workload_name(task, passes)
+        deadline = derive_stage12_deadline(campaign, workload)
+        deadlines[workload] = deadline
+        graph_deadline_ns = deadline["graph_deadline_ns"]
+        idle_p95 = {
+            domain: percentile(_trace(campaign, "idle", "other", domain, workload), 95)
+            for domain in ("linux", "rt")
+        }
+        static_domain = min(idle_p95, key=idle_p95.get)
+        for load in LOADS:
+            traces = {
+                policy: {
+                    domain: _trace(campaign, load, policy, domain, workload)
+                    for domain in ("linux", "rt")
+                }
+                for policy in POLICIES
+            }
+            for baseline in BASELINES:
+                events = None
+                policy = (
+                    "fifo" if baseline in {"tuned-linux", "qfabric-recovery-tuned"} else "other"
+                )
+                if baseline in {"ordinary-linux", "tuned-linux"}:
+                    placements = [("linux",) * CHAIN_NODES] * observations
+                elif baseline == "static-mcu-first":
+                    placements = [("rt",) * CHAIN_NODES] * observations
+                elif baseline == "manual-expert":
+                    placements = [MANUAL_EXPERT] * observations
+                elif baseline == "qfabric-static":
+                    placements = [(static_domain,) * CHAIN_NODES] * observations
+                elif baseline in {"qfabric-recovery", "qfabric-recovery-tuned"}:
+                    placements, events = _recovery_placements(
+                        observations, traces[policy], idle_p95["rt"], graph_deadline_ns
+                    )
+                else:
+                    placements = []
+                if baseline == "offline-oracle":
+                    # Non-causal: each node visit takes the faster of the two
+                    # domains' next measured samples (no boundary term exists,
+                    # because every RT sample is already a Linux-initiated RPC).
+                    linux = traces["other"]["linux"]
+                    rt = traces["other"]["rt"]
+                    values = [
+                        sum(
+                            min(
+                                linux[(index * CHAIN_NODES + node) % len(linux)],
+                                rt[(index * CHAIN_NODES + node) % len(rt)],
+                            )
+                            for node in range(CHAIN_NODES)
+                        )
+                        for index in range(observations)
+                    ]
+                else:
+                    values = _replay_chain(placements, traces[policy])
+                row = {
+                    "workload": workload,
+                    "load": load,
+                    "baseline": baseline,
+                    "caller_policy": policy,
+                    "graph_deadline_ns": graph_deadline_ns,
+                    **_summarize_replay(values, graph_deadline_ns),
+                }
+                if events is not None:
+                    row["recovery"] = events
+                results.append(row)
+    return {
+        "schema_version": 1,
+        "stage": 12,
+        "evidence_mode": "ordered-measured-trace-replay",
+        "campaign": str(campaign),
+        "observations": observations,
+        "chain_nodes": CHAIN_NODES,
+        "protocol": {
+            "window_invocations": WINDOW_INVOCATIONS,
+            "max_miss_rate_pct": MAX_MISS_RATE_PCT,
+            "violation_windows": VIOLATION_WINDOWS,
+            "probation_windows": PROBATION_WINDOWS,
+        },
+        "deadlines": deadlines,
+        "results": results,
+    }
