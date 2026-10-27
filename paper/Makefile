@@ -6,6 +6,7 @@ LATEXMK ?= latexmk
 all: qfabric-paper.pdf
 
 assets:
+	$(PYTHON) ../scripts/generate-interconnect-assets.py
 	$(PYTHON) ../scripts/generate-paper-assets.py
 
 qfabric-paper.pdf: qfabric-paper.tex references.bib assets
