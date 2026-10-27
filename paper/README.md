@@ -17,9 +17,9 @@ redacted. Replace that file and rebuild if a newer capture is required.
 that compiles with pdflatex and the included `.bbl`. The plain-text abstract
 for the arXiv form is in `arxiv-abstract.txt`.
 
-## Rights
+## License
 
 The manuscript, its LaTeX source, original figures and tables, and testbed
-photograph are © 2026 Ayushman Bhattacharya and Anwesha Chakraborty, All Rights
-Reserved. They are excluded from the repository's Apache-2.0 software license.
-See [LICENSE.md](LICENSE.md) for the complete prepublication rights notice.
+photograph are © 2026 Ayushman Bhattacharya and Anwesha Chakraborty and
+licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The
+software and asset generators remain Apache-2.0. See [LICENSE.md](LICENSE.md).
