@@ -12,6 +12,13 @@
     "interconnect-manifest.json",
     "interconnect-metrics.tex",
     "interconnect-payload.dat",
-    "metrics.tex"
+    "metrics.tex",
+    "stage12-ablation-table.tex",
+    "stage12-chain-table.tex",
+    "stage12-decomposition-table.tex",
+    "stage12-manifest.json",
+    "stage12-metrics.tex",
+    "stage12-percall-table.tex",
+    "stage12-percall.dat"
   ]
 }
