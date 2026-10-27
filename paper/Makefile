@@ -16,7 +16,10 @@ qfabric-paper.pdf: qfabric-paper.tex references.bib assets
 clean:
 	$(LATEXMK) -C qfabric-paper.tex
 
-# Self-contained arXiv source bundle: arXiv compiles with pdflatex and the .bbl.
+# Self-contained arXiv source bundle with only the inputs the manuscript uses;
+# arXiv compiles it with pdflatex and the .bbl.
 arxiv: qfabric-paper.pdf
 	tar -czf qfabric-arxiv.tar.gz qfabric-paper.tex qfabric-paper.bbl references.bib \
-		generated/*.tex generated/*.dat figures/testbed.jpg
+		generated/metrics.tex generated/interconnect-metrics.tex \
+		generated/interconnect-payload.dat generated/interconnect-concurrency.dat \
+		generated/stage12-*.tex generated/stage12-percall.dat figures/testbed.jpg
