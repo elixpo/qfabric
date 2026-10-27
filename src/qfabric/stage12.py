@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import math
 import os
@@ -13,16 +14,16 @@ from typing import Any
 from .profiling import percentile
 from .runtime import _connect_bridge
 
-BLOCK_BYTES = 256
-FIR_TAPS = 32
+BLOCK_BYTES = 64
+FIR_TAPS = 16
 # (task, passes): one trivial task, one byte-oriented kernel, and an FIR whose
 # pass count sweeps compute intensity against the fixed boundary cost.
 WORKLOADS = (
     ("add", 1),
     ("crc32", 1),
     ("fir", 1),
-    ("fir", 16),
     ("fir", 64),
+    ("fir", 512),
 )
 LOADS = ("idle", "cpu", "rt-contention")
 POLICIES = ("other", "fifo")
@@ -34,6 +35,10 @@ def workload_name(task: str, passes: int) -> str:
 
 def make_block(seed: int, invocation_id: int) -> bytes:
     return random.Random(seed * 1_000_003 + invocation_id).randbytes(BLOCK_BYTES)
+
+
+def encode_block(block: bytes) -> str:
+    return base64.b64encode(block).decode("ascii")
 
 
 def reference_crc32(block: bytes) -> int:
@@ -50,7 +55,7 @@ def reference_fir(block: bytes, passes: int) -> int:
         int.from_bytes(block[index : index + 2], "little", signed=True)
         for index in range(0, BLOCK_BYTES, 2)
     ]
-    taps = [(k + 1 if k < FIR_TAPS // 2 else FIR_TAPS - k) * 64 for k in range(FIR_TAPS)]
+    taps = [(k + 1 if k < FIR_TAPS // 2 else FIR_TAPS - k) * 256 for k in range(FIR_TAPS)]
     total = 0
     for pass_index in range(passes):
         perturbation = pass_index & 0x7F
@@ -89,7 +94,7 @@ class LinuxExecutor:
 
     def invoke(self, invocation_id: int, task: str, passes: int, block: bytes) -> tuple[int, int]:
         assert self._process.stdin is not None and self._process.stdout is not None
-        self._process.stdin.write(f"{invocation_id} {task} {passes} {block.hex()}\n")
+        self._process.stdin.write(f"{invocation_id} {task} {passes} {encode_block(block)}\n")
         self._process.stdin.flush()
         fields = self._process.stdout.readline().split()
         if len(fields) != 3 or fields[0] == "error":
@@ -118,7 +123,7 @@ class RtExecutor:
     def invoke(self, invocation_id: int, task: str, passes: int, block: bytes) -> tuple[int, int]:
         del invocation_id
         response = self._bridge.call(
-            "qf_stage12_invoke", f"{task} {passes} {block.hex()}", timeout=self._timeout
+            "qf_stage12_invoke", f"{task} {passes} {encode_block(block)}", timeout=self._timeout
         )
         fields = str(response).split()
         if len(fields) != 2 or fields[0] == "error":

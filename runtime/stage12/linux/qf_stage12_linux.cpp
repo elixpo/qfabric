@@ -8,31 +8,15 @@
 
 #include "../../../qtasks/add.qtask.h"
 #include "../../../qtasks/kernels.qtask.h"
+#include "../qf_stage12_codec.h"
 
 // Persistent Stage 12 executor. Each stdin line is
-//   INVOCATION_ID TASK PASSES HEX_PAYLOAD
+//   INVOCATION_ID TASK PASSES BASE64_PAYLOAD
 // and produces one stdout line
 //   INVOCATION_ID RESULT LOCAL_EXECUTION_NS
 // so the profiler measures task dispatch rather than process creation.
 
 namespace {
-
-int hex_value(char digit) {
-  if (digit >= '0' && digit <= '9') return digit - '0';
-  if (digit >= 'a' && digit <= 'f') return digit - 'a' + 10;
-  return -1;
-}
-
-bool decode_block(std::string_view hex, qf_block_t &block) {
-  if (hex.size() != 2 * QF_BLOCK_BYTES) return false;
-  for (std::size_t i = 0; i < QF_BLOCK_BYTES; ++i) {
-    const int high = hex_value(hex[2 * i]);
-    const int low = hex_value(hex[2 * i + 1]);
-    if (high < 0 || low < 0) return false;
-    block.bytes[i] = static_cast<std::uint8_t>((high << 4) | low);
-  }
-  return true;
-}
 
 bool execute(std::string_view task, std::uint32_t passes, const qf_block_t &block,
              std::int64_t &result) {
@@ -59,9 +43,9 @@ int main() {
     std::uint64_t invocation_id = 0;
     std::string task;
     std::uint32_t passes = 0;
-    std::string hex;
-    if (!(fields >> invocation_id >> task >> passes >> hex) || passes < 1 ||
-        !decode_block(hex, block)) {
+    std::string payload;
+    if (!(fields >> invocation_id >> task >> passes >> payload) || passes < 1 ||
+        !qf_decode_block(payload.data(), payload.size(), &block)) {
       std::cout << "error invalid-request" << std::endl;
       continue;
     }

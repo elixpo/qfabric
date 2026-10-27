@@ -5,29 +5,13 @@
 
 #include "qtasks/add.qtask.h"
 #include "qtasks/kernels.qtask.h"
+#include "runtime/stage12/qf_stage12_codec.h"
 
-// Stage 12 RT executor. A request is "TASK PASSES HEX_PAYLOAD"; the response
+// Stage 12 RT executor. A request is "TASK PASSES BASE64_PAYLOAD"; the response
 // is "RESULT LOCAL_EXECUTION_NS", or "error REASON". One RPC per invocation
 // keeps diagnostics off the measured path.
 
 qf_block_t qf_block{};
-
-int qf_hex_value(char digit) {
-  if (digit >= '0' && digit <= '9') return digit - '0';
-  if (digit >= 'a' && digit <= 'f') return digit - 'a' + 10;
-  return -1;
-}
-
-bool qf_decode_block(const String &hex) {
-  if (hex.length() != 2 * QF_BLOCK_BYTES) return false;
-  for (unsigned int i = 0; i < QF_BLOCK_BYTES; ++i) {
-    const int high = qf_hex_value(hex.charAt(2 * i));
-    const int low = qf_hex_value(hex.charAt(2 * i + 1));
-    if (high < 0 || low < 0) return false;
-    qf_block.bytes[i] = static_cast<std::uint8_t>((high << 4) | low);
-  }
-  return true;
-}
 
 String qf_stage12_invoke(String request) {
   const int first = request.indexOf(' ');
@@ -35,7 +19,7 @@ String qf_stage12_invoke(String request) {
   if (first < 0 || second < 0) return String("error invalid-request");
   const String task = request.substring(0, first);
   const long passes = request.substring(first + 1, second).toInt();
-  if (passes < 1 || !qf_decode_block(request.substring(second + 1))) {
+  if (passes < 1 || !qf_decode_block(request.c_str() + second + 1, request.length() - second - 1, &qf_block)) {
     return String("error invalid-request");
   }
 
