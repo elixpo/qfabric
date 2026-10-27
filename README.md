@@ -58,11 +58,18 @@ placement stops meeting its measured soft real-time contract.
 - The onboard LED matrix exposes live runtime state without becoming part of
   the decision policy.
 
-In the controlled four-node load-shift experiment, ordinary Linux reached a
-111.30 ms p95 latency and missed 67.3% of 80 ms deadlines. QFabric recovery
-reduced p95 to 70.61 ms and misses to 3.7%. A carefully tuned Linux
-`SCHED_FIFO` baseline remained faster at 23.91 ms with no misses—an important
-boundary on the research claim.
+The Stage 12 evaluation measures five workloads in both domains under idle,
+CPU-load, and higher-priority real-time contention. Every MCU call costs about
+19 ms of dispatch, and because each call is issued and relayed by Linux
+processes, Linux contention slows the MCU path more than the Linux path. Linux
+met every contract, QFabric correctly never migrated, and a controller without
+hysteresis would have made seven harmful moves, five of which probation rolled
+back. Migration cannot isolate a task from Linux interference on this board;
+the guards matter because they prevent harmful moves.
+
+v1.1.0 supersedes the v1.0.x result of a 36.6% recovery improvement, which
+came from timing a new Linux process per call and replaying MCU latencies from
+idle traces. See [Stage 12 evaluation](docs/stage-12-evaluation.md).
 
 ## Try the command-line tools
 
@@ -83,8 +90,8 @@ matching firmware from this repository.
 | Start here | What it contains |
 | --- | --- |
 | [Research paper](paper/) | IEEE-style manuscript, bibliography, figures, and build instructions |
-| [Stage 11 evaluation](docs/stage-11-evaluation.md) | Final experimental protocol and baselines |
-| [Stage 11 findings](docs/stage-11-findings.md) | Results, limitations, and research-question answers |
+| [Stage 12 evaluation](docs/stage-12-evaluation.md) | Matched-load protocol, results, and the v1.0.x correction |
+| [Stage 11 evaluation](docs/stage-11-evaluation.md) | Superseded evaluation, kept for transparency |
 | [Recovery design](docs/stage-7-recovery.md) | Safe switching, probation, commit, and rollback |
 | [Decision evidence](docs/stage-8-decisions.md) | Hash-chained records, explanations, and replay |
 | [LED visualization](docs/stage-9-visualization.md) | Physical telemetry grammar and overhead evaluation |
