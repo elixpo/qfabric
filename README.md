@@ -124,17 +124,15 @@ Use [CITATION.cff](CITATION.cff) when citing the software or research artifact.
 Versioned releases contain the paper, audited evaluation, package distributions,
 manifest, and SHA-256 checksums.
 
-## Licensing and manuscript rights
+## Licensing
 
 The QFabric software and non-manuscript project material are licensed under the
 [Apache License 2.0](LICENSE).
 
-The unpublished manuscript, its original figures and tables, and the testbed
-photograph are **not** licensed under Apache-2.0. They are © 2026 Ayushman
-Bhattacharya and Anwesha Chakraborty, All Rights Reserved, under the separate
-[manuscript rights notice](paper/LICENSE.md). Citation and personal review are
-permitted; republication, adaptation, or redistribution requires written
-permission until the authors publish replacement terms.
+The manuscript, its original figures and tables, and the testbed photograph are
+© 2026 Ayushman Bhattacharya and Anwesha Chakraborty and licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); see
+[paper/LICENSE.md](paper/LICENSE.md). Reuse is permitted with attribution.
 
 ## Project home
 
