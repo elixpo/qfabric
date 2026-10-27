@@ -5,6 +5,7 @@ changes.**
 
 [![PyPI](https://img.shields.io/pypi/v/qfabric?label=PyPI&color=3775A9)](https://pypi.org/project/qfabric/)
 [![CI](https://github.com/elixpo/qfabric/actions/workflows/ci.yml/badge.svg)](https://github.com/elixpo/qfabric/actions/workflows/ci.yml)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23692354.svg)](https://doi.org/10.5281/zenodo.23692354)
 [![License: Apache-2.0](https://img.shields.io/badge/software-Apache--2.0-blue.svg)](LICENSE)
 [![Research](https://img.shields.io/badge/status-research-purple.svg)](paper/)
 

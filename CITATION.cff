@@ -11,6 +11,7 @@ authors:
     email: "anwesha.elixpo@gmail.com"
 version: 1.1.0
 date-released: 2026-10-28
+doi: "10.5281/zenodo.23692354"
 repository-code: "https://github.com/elixpo/qfabric"
 url: "https://github.com/elixpo/qfabric"
 abstract: >-
@@ -29,4 +30,5 @@ preferred-citation:
   title: "QFabric: Guarded Cross-Domain Task Recovery and Its Limits on a Linux-RTOS Board"
   year: 2026
   version: "v1.1.0"
+  doi: "10.5281/zenodo.23692354"
   repository-code: "https://github.com/elixpo/qfabric"
