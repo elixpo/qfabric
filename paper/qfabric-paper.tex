@@ -168,19 +168,22 @@ execute in Linux userspace, so every MCU invocation begins and ends there.
 \centering
 \begin{tikzpicture}[
   font=\scriptsize,
-  node distance=4mm and 6mm,
   box/.style={draw,rounded corners,minimum width=28mm,minimum height=7mm,align=center},
   flow/.style={-{Latex[length=2mm]},thick}
 ]
-\node[box,fill=qblue!10] (app) {Application chain\\and QTask call sites};
-\node[box,fill=qblue!10,below=of app] (ctl) {Contract monitor and\\recovery controller};
-\node[box,fill=qgreen!12,below left=7mm and -6mm of ctl] (linux) {Linux executor\\(persistent process)};
-\node[box,fill=qorange!14,below right=7mm and -6mm of ctl] (rt) {Zephyr executor\\(Cortex-M33)};
+\node[box,fill=qblue!10] (app) at (0,0) {Application chain\\and QTask call sites};
+\node[box,fill=qblue!10] (ctl) at (0,-12mm) {Contract monitor and\\recovery controller};
+\node[box,fill=qgreen!12] (linux) at (-19mm,-28mm) {Linux executor\\(persistent process)};
+\node[box,fill=gray!8] (router) at (19mm,-28mm) {Bridge router\\(MessagePack RPC)};
+\node[draw,dashed,rounded corners,fit=(app)(ctl)(linux)(router),inner sep=2.5mm,
+      label={[font=\scriptsize]above:{Linux userspace (Cortex-A53)}}] {};
+\node[box,fill=qorange!14] (rt) at (19mm,-48mm) {Zephyr executor};
+\node[draw,rounded corners,fit=(rt),inner sep=2mm,
+      label={[font=\scriptsize,align=right]left:{Microcontroller\\(Cortex-M33)}}] {};
 \draw[flow] (app) -- (ctl);
-\draw[flow] (ctl.south west) -- node[left,pos=0.5]{pipe} (linux.north);
-\draw[flow] (ctl.south east) -- node[right,pos=0.5]{Bridge RPC} (rt.north);
-\node[draw,dashed,fit=(app)(ctl)(linux),inner sep=2.5mm,
-      label={[font=\scriptsize]above:{Linux userspace}}] {};
+\draw[flow] (ctl.west) -| node[left=1mm,pos=0.75]{pipe} (linux.north);
+\draw[flow] (ctl.east) -| node[right=1mm,pos=0.75]{dispatch} (router.north);
+\draw[flow,<->] (router) -- node[right=1mm]{serial link} (rt);
 \end{tikzpicture}
 \caption{\system on the UNO Q. The controller, dispatcher, and Bridge router
 run in Linux userspace; each task has a native implementation in both
@@ -416,16 +419,16 @@ thus authorizes probation, never commitment.
 \node[state,fill=qgreen!12] (stable) {Stable};
 \node[state,fill=qorange!13,below=of stable] (viol) {Violation\\hysteresis};
 \node[state,fill=qblue!10,below=of viol] (drain) {Admit candidate,\\drain, new epoch};
-\node[outcome,fill=gray!10,right=of viol] (noswitch) {No switch};
+\node[outcome,fill=gray!10,right=11mm of viol] (noswitch) {No switch};
 \node[state,fill=qorange!13,below=of drain] (prob) {Probation};
-\node[outcome,fill=qgreen!12,below left=6mm and 1mm of prob] (commit) {Commit};
-\node[outcome,fill=qred!10,below right=6mm and 1mm of prob] (rollback) {Rollback};
-\draw[arr] (stable) -- node[right,pos=0.5]{$k$ bad windows} (viol);
-\draw[arr] (viol) -- node[right,pos=0.5]{$A(v,d)$ holds} (drain);
-\draw[arr] (viol) -- node[above,pos=0.5]{reject} (noswitch);
-\draw[arr] (drain) -- node[right,pos=0.5]{quiescent} (prob);
-\draw[arr] (prob) -- node[left,pos=0.6]{Eq.~\eqref{eq:commit}} (commit);
-\draw[arr] (prob) -- node[right,pos=0.6]{violation} (rollback);
+\node[outcome,fill=qgreen!12,below left=7mm and 2mm of prob] (commit) {Commit};
+\node[outcome,fill=qred!10,below right=7mm and 2mm of prob] (rollback) {Rollback};
+\draw[arr] (stable) -- node[right=1mm,pos=0.5]{$k$ bad windows} (viol);
+\draw[arr] (viol) -- node[right=1mm,pos=0.5]{$A(v,d)$ holds} (drain);
+\draw[arr] (viol) -- node[below=0.5mm,pos=0.5]{reject} (noswitch);
+\draw[arr] (drain) -- node[right=1mm,pos=0.5]{quiescent} (prob);
+\draw[arr] (prob.west) -| node[above=0.5mm,pos=0.15]{Eq.~\eqref{eq:commit} holds} (commit.north);
+\draw[arr] (prob.east) -| node[above=0.5mm,pos=0.15]{violation} (rollback.north);
 \end{tikzpicture}
 \caption{Guarded recovery. Every terminal outcome returns the monitor to
 Stable.}
@@ -933,7 +936,8 @@ The repository~\cite{qfabric2026} contains source, generated code, unit
 tests, board sketches, raw and processed traces, campaign logs, audits, and
 the generators for every number, table, and figure in this paper; running
 \texttt{make} in the \texttt{paper} directory regenerates the assets and
-builds the PDF. The release cited here is \texttt{v1.1.0}.
+builds the PDF. The release cited here, \texttt{v1.1.0}, is archived on Zenodo
+with DOI \href{https://doi.org/10.5281/zenodo.23692354}{\texttt{10.5281/zenodo.23692354}}.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
