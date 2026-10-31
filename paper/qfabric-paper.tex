@@ -16,8 +16,19 @@
 \usepackage{pgfplotstable}
 \pgfplotsset{compat=1.18}
 \usepackage{dblfloatfix}
-\usepackage[section]{placeins}
+\usepackage{placeins}
 \usepackage[hidelinks]{hyperref}
+
+% Spread floats: at most one two-column float and one column float per page top,
+% and keep at least a third of each column for text.
+\setcounter{dbltopnumber}{1}
+\setcounter{topnumber}{1}
+\setcounter{bottomnumber}{1}
+\renewcommand{\topfraction}{0.6}
+\renewcommand{\dbltopfraction}{0.6}
+\renewcommand{\textfraction}{0.3}
+\renewcommand{\floatpagefraction}{0.75}
+\renewcommand{\dblfloatpagefraction}{0.75}
 
 \input{generated/metrics.tex}
 \input{generated/interconnect-metrics.tex}
@@ -681,27 +692,6 @@ percentiles; ``loaded'' runs four \texttt{stress-ng} CPU workers. Point labels i
 \label{fig:interconnect}
 \end{figure*}
 
-\subsection{RQ2: Matched-load per-call comparison}
-\label{sec:percall}
-Table~\ref{tab:percall} and Fig.~\ref{fig:percall} compare the domains per
-call. At idle, an MCU addition takes \StageTwelveIdleRtAddP~ms at p95 against
-\StageTwelveIdleLinuxAddP~ms in Linux, a \StageTwelveIdleRatio$\times$ gap.
-Table~\ref{tab:decomposition} decomposes the idle median with
-Eq.~\eqref{eq:decomposition}. The MCU residual stays near 19~ms for every
-workload, so dispatch, not compute, dominates the MCU path; and the MCU
-computes FIR$\times$512 \StageTwelveFirComputeRatio$\times$ more slowly than
-the Cortex-A53, so heavier kernels widen the gap rather than closing it.
-
-\begin{table*}[t]
-\caption{Per-call p95 latency (ms) by load and caller policy. Brackets give
-95\% block-bootstrap confidence intervals for the ordinary caller. ``FIFO''
-denotes a \texttt{SCHED\_FIFO} priority-50 caller.}
-\label{tab:percall}
-\centering
-\footnotesize
-\input{generated/stage12-percall-table.tex}
-\end{table*}
-
 \begin{figure*}[t]
 \centering
 \pgfplotstableread{generated/stage12-percall.dat}\percalldata
@@ -730,7 +720,29 @@ is issued and relayed by Linux processes.}
 \label{fig:percall}
 \end{figure*}
 
-\begin{table}[t]
+\subsection{RQ2: Matched-load per-call comparison}
+\label{sec:percall}
+Table~\ref{tab:percall} and Fig.~\ref{fig:percall} compare the domains per
+call. At idle, an MCU addition takes \StageTwelveIdleRtAddP~ms at p95 against
+\StageTwelveIdleLinuxAddP~ms in Linux, a \StageTwelveIdleRatio$\times$ gap.
+Table~\ref{tab:decomposition} decomposes the idle median with
+Eq.~\eqref{eq:decomposition}. The MCU residual stays near 19~ms for every
+workload, so dispatch, not compute, dominates the MCU path; and the MCU
+computes FIR$\times$512 \StageTwelveFirComputeRatio$\times$ more slowly than
+the Cortex-A53, so heavier kernels widen the gap rather than closing it.
+
+\begin{table}[!tb]
+\caption{Per-call p95 latency (ms) with ordinary callers. Brackets give 95\%
+block-bootstrap confidence intervals.}
+\label{tab:percall}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\input{generated/stage12-percall-table.tex}
+\end{table}
+
+
+\begin{table}[!tb]
 \caption{Idle per-call decomposition (Eq.~\ref{eq:decomposition}). Compute is
 measured inside each executor; the residual is the difference of medians.}
 \label{tab:decomposition}
@@ -742,7 +754,7 @@ measured inside each executor; the residual is the difference of medians.}
 
 Load changes the picture in an instructive way. CPU load raises the
 ordinary Linux p95 to a few milliseconds, which a \texttt{SCHED\_FIFO} caller
-removes almost entirely. Under RT contention, the Linux path keeps a p95
+removes almost entirely (Table~\ref{tab:chain}, tuned Linux). Under RT contention, the Linux path keeps a p95
 below 2~ms with occasional stalls, while the MCU path degrades sharply, with
 p99 up to \StageTwelveContentionRtPNinetyNine~ms against
 \StageTwelveContentionLinuxPNinetyNine~ms for Linux. An MCU invocation
@@ -765,15 +777,17 @@ With the hysteresis of Eq.~\eqref{eq:hysteresis}, \system performs
 the correct decision: no admissible alternative would have improved the
 contract.
 
-\begin{table*}[t]
-\caption{Replayed four-node chain (\StageTwelveChainObservations{}
-observations per cell). $D_G$ is the graph deadline of
-Eq.~\eqref{eq:deadline}; ``stay'' means neither recovery variant switched.}
+\begin{table}[!tb]
+\caption{Replayed four-node chain, \StageTwelveChainObservations{}
+observations per cell; latencies in ms. $D_G$ is the graph deadline of
+Eq.~\eqref{eq:deadline}. Neither \system recovery variant switched in any
+cell.}
 \label{tab:chain}
 \centering
-\footnotesize
+\scriptsize
+\setlength{\tabcolsep}{2.6pt}
 \input{generated/stage12-chain-table.tex}
-\end{table*}
+\end{table}
 
 \subsection{RQ4: Are the guards necessary?}
 \label{sec:guards}
@@ -798,7 +812,7 @@ moves; the remaining two were still in probation when the trace ended (``open at
 Hysteresis prevents the harmful moves, and probation bounds the damage when
 a move is made anyway.
 
-\begin{table}[t]
+\begin{table}[!tb]
 \caption{Hysteresis ablation under RT contention: switching on the first
 violating window ($k=1$) instead of $k=3$.}
 \label{tab:ablation}
@@ -809,34 +823,17 @@ violating window ($k=1$) instead of $k=3$.}
 \end{table}
 
 \subsection{RQ5: Mechanism overhead}
-Table~\ref{tab:overhead} reports the cost of the mechanism itself. One policy
+The mechanism itself is inexpensive. One policy
 decision costs \PolicyCpuP\,$\mu$s of CPU time and \PolicyWallP\,$\mu$s of wall
 time at p95 over 1,000 in-process evaluations, with a \PolicyPeakBytes-byte
 peak observed by \texttt{tracemalloc}; the latter excludes the interpreter
 baseline and is not total process memory. A decision is thus two orders of
-magnitude cheaper than one MCU dispatch. The worst LED-matrix refresh profile
+magnitude cheaper than one MCU dispatch (\StageTwelveIdleRtAddP~ms at p95 for
+an idle addition). The worst LED-matrix refresh profile
 changes Bridge p95 by \VisualizationOverhead.
 
-\begin{table}[t]
-\caption{Measured mechanism costs}
-\label{tab:overhead}
-\centering
-\small
-\begin{tabular}{lr}
-\toprule
-Component & Result \\
-\midrule
-Policy decision CPU time, p95 & \PolicyCpuP\,$\mu$s \\
-Policy decision wall time, p95 & \PolicyWallP\,$\mu$s \\
-Policy traced peak allocation & \PolicyPeakBytes\ bytes \\
-Linux dispatch, add, idle p95 & \StageTwelveIdleLinuxAddP\ ms \\
-MCU dispatch, add, idle p95 & \StageTwelveIdleRtAddP\ ms \\
-Worst LED display delta & \VisualizationOverhead \\
-\bottomrule
-\end{tabular}
-\end{table}
 
-\begin{table}[t]
+\begin{table}[!tb]
 \caption{Answers to the research questions}
 \label{tab:rq}
 \centering
@@ -920,6 +917,7 @@ prototype and effect annotations reject known-ineligible tasks, but this is
 not a proof of implementation equivalence. Production use would need state
 transfer, authentication, fault containment, and multi-client analysis.
 
+\FloatBarrier
 \section{Conclusion}
 \label{sec:conclusion}
 \system demonstrates a guarded form of runtime adaptation across a
