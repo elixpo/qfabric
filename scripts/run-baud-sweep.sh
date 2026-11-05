@@ -77,7 +77,8 @@ trap restore EXIT
 
 as_user mkdir -p "$root"
 summary="$root/summary.txt"
-: >"$summary"
+# Append, so a resumed sweep (QF_BAUDS set to the remaining rates) keeps earlier results.
+touch "$summary"
 for baud in $bauds; do
   echo "== $baud baud"
   flash "$baud"
