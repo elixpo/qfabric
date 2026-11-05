@@ -11,6 +11,7 @@ bauds="${QF_BAUDS:-115200 230400 460800 921600 2000000}"
 images="${QF_BAUD_IMAGES:-build/baud}"
 iterations="${QF_ITERATIONS:-1000}"
 warmup="${QF_WARMUP:-50}"
+timeout="${QF_TIMEOUT:-1.0}"
 dropin_dir=/etc/systemd/system/arduino-router.service.d
 dropin="$dropin_dir/zz-qfabric-baud.conf"
 
@@ -89,7 +90,7 @@ for baud in $bauds; do
   fi
   as_user qf workload profile \
     --domain rt --load idle --policy other \
-    --iterations "$iterations" --warmup "$warmup" --timeout 1.0 \
+    --iterations "$iterations" --warmup "$warmup" --timeout "$timeout" \
     --output "$root/baud-$baud.json" | sed "s/^/$baud /" | tee -a "$summary"
 done
 
@@ -98,6 +99,7 @@ done
   echo "bauds=$bauds"
   echo "iterations=$iterations"
   echo "warmup=$warmup"
+  echo "timeout_s=$timeout"
   echo "router=$(/usr/bin/arduino-router --version 2>/dev/null | head -1 || echo unknown)"
   echo "kernel=$(uname -r)"
   echo "git_commit=$(git rev-parse HEAD)"
