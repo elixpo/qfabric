@@ -12,6 +12,10 @@ images="${QF_BAUD_IMAGES:-build/baud}"
 iterations="${QF_ITERATIONS:-1000}"
 warmup="${QF_WARMUP:-50}"
 timeout="${QF_TIMEOUT:-1.0}"
+# Reliable-link mode (arduino-router #73): run this router binary, start every
+# session at 115200 and let the link negotiate up to each rate.
+router_bin="${QF_ROUTER_BIN:-}"
+restore_image="${QF_RESTORE_IMAGE:-build/baud/115200}"
 dropin_dir=/etc/systemd/system/arduino-router.service.d
 dropin="$dropin_dir/zz-qfabric-baud.conf"
 
@@ -30,7 +34,31 @@ done
 as_user() { sudo -u "$SUDO_USER" env PATH="$PATH" HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)" "$@"; }
 
 flash() {
-  as_user arduino-cli upload --fqbn arduino:zephyr:unoq --input-dir "$images/$1" >/dev/null
+  as_user arduino-cli upload --fqbn arduino:zephyr:unoq --input-dir "$1" >/dev/null
+}
+
+router_command() {
+  local after="--after-ready '/usr/bin/gpioset -c /dev/gpiochip1 -t0 70=1'"
+  if [[ -n "$router_bin" ]]; then
+    echo "$router_bin --unix-port /var/run/arduino-router.sock --serial-port /dev/ttyHS1 --serial-baudrate 115200 --serial-max-baudrate $1 --serial-protocol reliable $after"
+  else
+    echo "/usr/bin/arduino-router --unix-port /var/run/arduino-router.sock --serial-port /dev/ttyHS1 --serial-baudrate $1 $after"
+  fi
+}
+
+save_link_stats() {
+  as_user python - "$1" <<'PYEOF'
+import json, sys
+from qfabric.runtime import _connect_bridge
+bridge = _connect_bridge("unix:///var/run/arduino-router.sock")
+try:
+    stats = bridge.call("$/serial/stats", timeout=2.0)
+finally:
+    bridge.disconnect()
+with open(sys.argv[1], "w", encoding="utf-8") as handle:
+    json.dump(stats, handle, indent=2, sort_keys=True, default=str)
+    handle.write("\n")
+PYEOF
 }
 
 set_router_baud() {
@@ -38,7 +66,7 @@ set_router_baud() {
   cat >"$dropin" <<EOF
 [Service]
 ExecStart=
-ExecStart=/usr/bin/arduino-router --unix-port /var/run/arduino-router.sock --serial-port /dev/ttyHS1 --serial-baudrate $1 --after-ready '/usr/bin/gpioset -c /dev/gpiochip1 -t0 70=1'
+ExecStart=$(router_command "$1")
 EOF
   systemctl daemon-reload
   systemctl restart arduino-router
@@ -70,7 +98,7 @@ restore() {
   echo "== restoring 115200"
   rm -f "$dropin"
   systemctl daemon-reload
-  flash 115200 || echo "warning: could not re-flash the 115200 image" >&2
+  flash "$restore_image" || echo "warning: could not re-flash $restore_image" >&2
   systemctl restart arduino-router
   wait_for_link && echo "restored: Bridge answers at 115200" || echo "warning: Bridge not answering after restore" >&2
 }
@@ -82,7 +110,7 @@ summary="$root/summary.txt"
 touch "$summary"
 for baud in $bauds; do
   echo "== $baud baud"
-  flash "$baud"
+  flash "$images/$baud"
   set_router_baud "$baud"
   if ! wait_for_link; then
     echo "$baud unreachable" | tee -a "$summary"
@@ -92,6 +120,9 @@ for baud in $bauds; do
     --domain rt --load idle --policy other \
     --iterations "$iterations" --warmup "$warmup" --timeout "$timeout" \
     --output "$root/baud-$baud.json" | sed "s/^/$baud /" | tee -a "$summary"
+  if [[ -n "$router_bin" ]]; then
+    save_link_stats "$root/stats-$baud.json" || echo "$baud: could not read link stats" | tee -a "$summary"
+  fi
 done
 
 {
@@ -100,6 +131,7 @@ done
   echo "iterations=$iterations"
   echo "warmup=$warmup"
   echo "timeout_s=$timeout"
+  echo "router_bin=${router_bin:-/usr/bin/arduino-router}"
   echo "router=$(/usr/bin/arduino-router --version 2>/dev/null | head -1 || echo unknown)"
   echo "kernel=$(uname -r)"
   echo "git_commit=$(git rev-parse HEAD)"
