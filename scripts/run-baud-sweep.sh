@@ -16,6 +16,7 @@ timeout="${QF_TIMEOUT:-1.0}"
 # session at 115200 and let the link negotiate up to each rate.
 router_bin="${QF_ROUTER_BIN:-}"
 restore_image="${QF_RESTORE_IMAGE:-build/baud/115200}"
+serial_protocol="${QF_SERIAL_PROTOCOL:-auto}"
 dropin_dir=/etc/systemd/system/arduino-router.service.d
 dropin="$dropin_dir/zz-qfabric-baud.conf"
 
@@ -40,7 +41,7 @@ flash() {
 router_command() {
   local after="--after-ready '/usr/bin/gpioset -c /dev/gpiochip1 -t0 70=1'"
   if [[ -n "$router_bin" ]]; then
-    echo "$router_bin --unix-port /var/run/arduino-router.sock --serial-port /dev/ttyHS1 --serial-baudrate 115200 --serial-max-baudrate $1 --serial-protocol reliable $after"
+    echo "$router_bin --unix-port /var/run/arduino-router.sock --serial-port /dev/ttyHS1 --serial-baudrate 115200 --serial-max-baudrate $1 --serial-protocol $serial_protocol $after"
   else
     echo "/usr/bin/arduino-router --unix-port /var/run/arduino-router.sock --serial-port /dev/ttyHS1 --serial-baudrate $1 $after"
   fi
@@ -132,6 +133,7 @@ done
   echo "warmup=$warmup"
   echo "timeout_s=$timeout"
   echo "router_bin=${router_bin:-/usr/bin/arduino-router}"
+  echo "serial_protocol=${router_bin:+$serial_protocol}"
   echo "router=$(/usr/bin/arduino-router --version 2>/dev/null | head -1 || echo unknown)"
   echo "kernel=$(uname -r)"
   echo "git_commit=$(git rev-parse HEAD)"
